@@ -3,8 +3,31 @@ const net = require("net");
 const utils = require("./utils")
 const cp = require('child_process');
 
-const [IP, PORT] = ['0.0.0.0', 9000]
 const logging = cp.fork('./logging.js');
+
+
+// load constants from .env, if one exists.
+if (fs.readdirSync('./').includes('.env')) {
+    require('dotenv').config();
+}
+const [IP, PORT, incoming_folder] = [
+    process.env.SRV_IP, 
+    Number(process.env.PORT),
+    process.env.INCOMING_FOLDER    
+];
+if ([PORT, IP, incoming_folder].includes(undefined) 
+    || [PORT, IP, incoming_folder].includes('') 
+    || [PORT, IP, incoming_folder].includes(NaN)) 
+    {
+        logging.send({
+            level: "error", 
+            message: {
+                error: 'Malformed environment variables, check README.MD', 
+            },
+            service: "receiver"}
+        );
+        throw Error('Malformed environment variables, check README.MD');
+}
 
 /*
     This tcp server is meant to receive files.
@@ -22,16 +45,14 @@ server.on('connection', handleConn);
  * @param {net.Socket} conn 
  */
 function handleConn(conn){
-    let [fulldate, ip] = [ 
-        utils.get_date(),
-        conn.remoteAddress.split(":")
-    ]
+    let ip = conn.remoteAddress.split(":");
+    
     /*  Checks if the given dir exists (and creates it if it doesn't).
         Returns the same string it was given, for later use.
         Then a path to the generated file is declared.
     */
     try {
-        var path = utils.check_dir(`./logs/${ip[ip.length - 1]}`);   
+        var path = utils.check_dir(`${incoming_folder}/${ip[ip.length - 1]}`);   
     } catch (err) {
         logging.send({
             level: "error", 
@@ -42,10 +63,22 @@ function handleConn(conn){
             service: "receiver"});
         throw err;
     }
-    var file_path = `${path}/${ip[ip.length - 1]}_${fulldate}${Math.random()}.json`
+    //var file_path = `${path}/${ip[ip.length - 1]}_${fulldate}${Math.random()}.json`
     
     //  Callback functions are assigned to the different events possible.
-    conn.on('data', onConnData);  
+    /** To keep the name of a file, it wil be first sent alone.
+     *  Thus, the event listener is first ONCE, and then registers an ON.
+     *  It keeps the filename and binds it to the listener that will append data into it.
+     *  It will rewrite the file at the beginning of the 
+     *  connection in case the same file is sent twice.
+     *  As to not mix files.
+     */
+    conn.once("data", (data) => {
+        var base_name = {file_path: `${path}/${data}`};
+        fs.writeFile(base_name.file_path,"");
+        var onConnData = fileAppender.bind(base_name);
+        conn.on('data', onConnData);
+    });
     conn.once('close', onConnClose);  
     conn.on('error', onConnError);
     
@@ -54,14 +87,14 @@ function handleConn(conn){
      *  It will append the data into the file path generated above.
      * @param {Buffer} data 
      */
-    function onConnData(data){
-        fs.appendFile(file_path, data, function (err) {
+    function fileAppender(data){
+        fs.appendFile(this.file_path, data, function (err) {
             if (err) logging.send({
                 level: "error", 
                 message: {
                     function: "appendFile",
                     error: err,
-                    note: `Couldn't append/create ${file_path}.\nExecuted in onConnData.`}, 
+                    note: `Couldn't append/create ${this.file_path}.\nExecuted in fileAppender.`}, 
                 service: "receiver"});
         });
     }
@@ -80,7 +113,7 @@ function handleConn(conn){
 
     /**
      *  Upon error event, the server will attempt to close the connection.
-     *  It will then log the error onscreen.
+     *  It will then log the error, while also displaying it onscreen.
      * @param {Error} err 
      */
     function onConnError(err){

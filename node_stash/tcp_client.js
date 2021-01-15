@@ -2,10 +2,36 @@ const net = require('net');
 const fs = require('graceful-fs');
 const utils = require('./utils');
 const cp = require('child_process');
+const path = require('path');
+const process = require('process');
 
-// Constants: port and host to connect to, directory to monitor for files.
-const [PORT, SERVER, DIRPATH] = [9000, '127.0.0.1', "./archive/"];
+
 const logging = cp.fork('./logging.js');
+
+
+// load constants from .env, if one exists.
+if (fs.readdirSync('./').includes('.env')) {
+    require('dotenv').config();
+}
+// Constants: port and host to connect to, directory to monitor for files.
+const [PORT, SERVER, DIRPATH] = [
+    process.env.PORT_TO, 
+    process.env.IP_TO, 
+    process.env.OUTGOING_FOLDER
+];
+if ([PORT, SERVER, DIRPATH].includes(undefined)
+    || [PORT, SERVER, DIRPATH].includes('')
+    || [PORT, SERVER, DIRPATH].includes(NaN)) 
+    {
+        logging.send({
+            level: "error", 
+            message: {
+                error: 'Malformed environment variables, check README.MD', 
+            },
+            service: "sender"}
+        );
+        throw Error('Malformed environment variables, check README.MD');
+}
 
 
 /**
@@ -19,13 +45,20 @@ const logging = cp.fork('./logging.js');
 function connect_and_send(file_path) {
     //  A connection to the server is made.
     let client = net.createConnection(PORT, SERVER, () => {
-    
+        //  First, the filename is sent, and then the connection 
+        //  is paused until the file is being sent. 
+        //  This is done to make sure the filename is sent isolated.
+        client.write(path.basename(file_path));
+        client.pause();
+
         //  The given file path is turned into a readable data stream.
         var fileStream = fs.createReadStream(file_path);
 
         /*  On the event that the data is ready to be operated,
-            it is piped to the client, thus being sent to the server.*/
+            the client is resumed, and the
+            data is piped to the client, thus being sent to the server.*/
         fileStream.on('open', () => {
+            client.resume();
             fileStream.pipe(client);
         });
 
