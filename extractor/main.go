@@ -37,7 +37,6 @@ func logToFile(cli *docker.Client, container types.Container) {
 }
 
 func main() {
-	// fmt.Println("wow")
 	cli, err := docker.NewEnvClient()
 	check(err)
 
