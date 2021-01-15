@@ -1,0 +1,23 @@
+{
+  "name": "node_stash",
+  "version": "1.0.0",
+  "description": "",
+  "main": "utils.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/orireiter/node_stash.git"
+  },
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/orireiter/node_stash/issues"
+  },
+  "homepage": "https://github.com/orireiter/node_stash#readme",
+  "dependencies": {
+    "graceful-fs": "^4.2.4",
+    "winston": "^3.3.3"
+  }
+}
