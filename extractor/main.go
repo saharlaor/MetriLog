@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"net"
 	"os"
@@ -19,7 +20,7 @@ func check(e error) {
 
 func newLogFile(cli *docker.Client, container types.Container) (file *os.File) {
 
-	file, err := os.OpenFile(fmt.Sprintf("/var/log%s.log", container.Names[0]), os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0755)
+	file, err := os.OpenFile(fmt.Sprintf("/var/log/metrilog%s.json", container.Names[0]), os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0755)
 	check(err)
 
 	ifcfg, err := net.Interfaces()
@@ -27,14 +28,50 @@ func newLogFile(cli *docker.Client, container types.Container) (file *os.File) {
 	addr, err := ifcfg[0].Addrs()
 	check(err)
 
-	_, err = file.Write([]byte(fmt.Sprintf("{\n    \"sender\": \"%s\"\n    \"container\": \"%s\"\n}\n", addr[0], container.Names)))
+	_, err = file.Write([]byte(fmt.Sprintf(
+		`{
+  "metadata": {
+    "sender": "%s",
+    "container": "%s"
+  },
+  "body": {
+`,
+		addr[0], container.Names[0])))
 	check(err)
+
 	return
+}
+
+func closeLogFile(file *os.File) {
+	fmt.Printf("Closing the body section in the json syntax file and reformatting %s\n", file.Name())
+	_, err := file.Write([]byte(
+		`  }
+}`))
+	check(err)
+
+	fmt.Println("Reformatting the json content of the file")
+	fileContent := []byte("")
+	_, err = file.Read(fileContent)
+	check(err)
+	buffer := new(bytes.Buffer)
+	encoder := json.NewEncoder(buffer)
+	encoder.SetIndent("", "  ")
+
+	err = encoder.Encode(fileContent)
+	check(err)
+
+	err = file.Close()
+	check(err)
+	fmt.Printf("Closed file %s to writing\n", file.Name())
 }
 
 func logInspect(cli *docker.Client, container types.Container, file *os.File) {
 	_, containerData, err := cli.ContainerInspectWithRaw(context.Background(), container.ID, false)
 	check(err)
+	containerData = containerData[:len(containerData)-1] //delete the new line at the end of the byte array
+
+	containerData = append([]byte(`"Inspect": `), containerData...)
+	containerData = append(containerData, ",\n"...)
 
 	_, err = file.Write(containerData)
 	check(err)
@@ -47,6 +84,9 @@ func logStats(cli *docker.Client, container types.Container, file *os.File) {
 	buffer := new(bytes.Buffer)
 	buffer.ReadFrom(containerData.Body)
 	stats := buffer.Bytes()
+
+	_, err = file.Write([]byte(`"Stats": `))
+	check(err)
 
 	_, err = file.Write(stats)
 	check(err)
@@ -65,8 +105,7 @@ func main() {
 		logFile := newLogFile(cli, container)
 		logInspect(cli, container, logFile)
 		logStats(cli, container, logFile)
-		logFile.Close()
-		fmt.Printf("Closed file %s to writing\n", logFile.Name())
+		closeLogFile(logFile)
 	}
-
+	fmt.Println("Finished logging all docker containers")
 }
