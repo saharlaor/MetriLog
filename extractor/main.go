@@ -3,7 +3,6 @@ package main
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"net"
 	"os"
@@ -49,16 +48,18 @@ func closeLogFile(file *os.File) {
 }`))
 	check(err)
 
-	fmt.Println("Reformatting the json content of the file")
-	fileContent := []byte("")
-	_, err = file.Read(fileContent)
-	check(err)
-	buffer := new(bytes.Buffer)
-	encoder := json.NewEncoder(buffer)
-	encoder.SetIndent("", "  ")
+	//// Doesn't work
+	//// TODO: Fix JSON Reformatting
+	// fmt.Println("Reformatting the json content of the file")
+	// fileContent := []byte("")
+	// _, err = file.Read(fileContent)
+	// check(err)
+	// buffer := new(bytes.Buffer)
+	// encoder := json.NewEncoder(buffer)
+	// encoder.SetIndent("", "  ")
 
-	err = encoder.Encode(fileContent)
-	check(err)
+	// err = encoder.Encode(fileContent)
+	// check(err)
 
 	err = file.Close()
 	check(err)
