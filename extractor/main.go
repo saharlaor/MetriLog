@@ -23,10 +23,11 @@ func Check(e error) {
 // Adds metadata in json format and opens a body section
 // It returns the file created
 func NewLogFile(cli *docker.Client, container types.Container) (file *os.File) {
-
+	fmt.Printf("\nCreating log file for %s at /var/log/metrilog\n", container.Names[0])
 	file, err := os.OpenFile(fmt.Sprintf("/var/log/metrilog%s.json", container.Names[0]), os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0755)
 	Check(err)
 
+	// TODO: Get the outbound IP address instead of loopback
 	ifcfg, err := net.Interfaces()
 	Check(err)
 	addr, err := ifcfg[0].Addrs()
@@ -64,7 +65,6 @@ func CloseLogFile(file *os.File) {
 	// buffer := new(bytes.Buffer)
 	// encoder := json.NewEncoder(buffer)
 	// encoder.SetIndent("", "  ")
-
 	// err = encoder.Encode(fileContent)
 	// Check(err)
 
@@ -75,6 +75,7 @@ func CloseLogFile(file *os.File) {
 
 // LogInspect adds to file's body section the docker inspect results for container
 func LogInspect(cli *docker.Client, container types.Container, file *os.File) {
+	fmt.Print("Getting docker inspect\n")
 	_, containerData, err := cli.ContainerInspectWithRaw(context.Background(), container.ID, false)
 	Check(err)
 	containerData = containerData[:len(containerData)-1] //delete the new line at the end of the byte array
@@ -88,6 +89,7 @@ func LogInspect(cli *docker.Client, container types.Container, file *os.File) {
 
 // LogStats adds to file's body section the docker stats results for container
 func LogStats(cli *docker.Client, container types.Container, file *os.File) {
+	fmt.Print("Getting docker stats\n")
 	containerData, err := cli.ContainerStats(context.Background(), container.ID, false)
 	Check(err)
 
@@ -110,7 +112,7 @@ func main() {
 	Check(err)
 
 	for _, container := range containers {
-		fmt.Printf("%s %s %s\n", container.ID[:10], container.Image, container.Names)
+		fmt.Printf("%s %s %s\n", container.ID[:10], container.Image, container.Names[0])
 
 		logFile := NewLogFile(cli, container)
 		LogInspect(cli, container, logFile)
